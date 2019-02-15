@@ -5,4 +5,4 @@ We use pretty simple data model which contains two entities and single relations
 
 The definition of the data model is shown in the image below.
 
-![Data Model](https://github.com/goshaQ/lime/blob/master/assets/dm.png)
+![Data Model](https://github.com/goshaQ/ridiculous-scarper/blob/master/assets/dm.png)
