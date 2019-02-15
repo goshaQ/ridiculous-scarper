@@ -14,7 +14,14 @@ def authenticated_session(authentication_url, secrets):
     session = requests.Session()
 
     # Authenticate
-    response = session.post(authentication_url, data=secrets)
+    response = session.post(secrets['url'], data=secrets)
 
     # Verify that authentication succeeded
     _verify_authentication(response)
+
+    english_version_url = 'https://www.e-krediidiinfo.ee/keel/en'
+
+    # Switch to english version
+    session.get(english_version_url)
+
+    return session

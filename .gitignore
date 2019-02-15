@@ -4,3 +4,6 @@ __pycache__/
 # IntelliJ IDEA settings
 .idea/
 inference-optimizer.iml
+
+# Database
+neo4j/
