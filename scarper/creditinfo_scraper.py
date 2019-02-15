@@ -1,8 +1,12 @@
+import time
 import neo4j
+import logging
 import requests
 
 from lxml import html
 from multiprocessing.pool import ThreadPool
+
+logger = logging.getLogger(__name__)
 
 
 class CreditinfoScarper:
@@ -13,6 +17,10 @@ class CreditinfoScarper:
         :param search_params: a dictionary with search parameters (default: None)
         """
         super().__init__()
+        logger.debug(
+            'Created new CreditinfoScarper object with params: '
+            'session={0}, driver={1}, rc_range={2}, search_params={3}'
+            .format(session, driver, rc_range, search_params))
 
         self._VAT_URL = 'https://www.e-krediidiinfo.ee/isik/{0}/vat'
         self._SEARCH_URL = 'https://www.e-krediidiinfo.ee/otsing'
@@ -48,22 +56,28 @@ class CreditinfoScarper:
                 self._RC_RANGE = rc_range
                 self._RC_RANGE_ITER = iter(rc_range)
             else:
+                logger.error('The range of registration codes must be within [10000000, 99999999]')
                 raise ValueError('Illegal range of registration codes: ' + str(range))
         elif self._SEARCH_PARAMS['riik'] == 'fi':
+            logger.error('At the moment, Finish companies are not supported')
             raise NotImplementedError('Search of Finish companies not implemented')
         elif self._SEARCH_PARAMS['riik'] == 'lt':
+            logger.error('At the moment, Estonian companies are not supported')
             raise NotImplementedError('Search of Latvian companies not implemented')
         else:
-            raise ValueError('Illegal county code: ' + self._SEARCH_PARAMS['riik'])
+            logger.error('The specified country is not known')
+            raise ValueError('Illegal country code: ' + self._SEARCH_PARAMS['riik'])
 
         if isinstance(session, requests.Session):
             self._SESSION = session
         else:
+            logger.error('Invalid session object')
             raise ValueError('Invalid session object')
 
         if isinstance(driver, neo4j.DirectDriver):
             self._DRIVER = driver
         else:
+            logger.error('Invalid driver object')
             raise ValueError('Invalid driver object')
 
     def _build_query(self):
@@ -74,6 +88,8 @@ class CreditinfoScarper:
         try:
             next_rc = next(self._RC_RANGE_ITER)
         except StopIteration:
+            logger.info('Reached the end of registration codes range')
+
             self._RC_RANGE_ITER = iter(self._RC_RANGE)
             next_rc = next(self._RC_RANGE_ITER)
 
@@ -93,11 +109,15 @@ class CreditinfoScarper:
         try:
             response = self._SESSION.get(search_url, params=params, timeout=timeout)
         except requests.Timeout as err:
+            logger.error('Connection timeout ' + str(err))
             return None
         except requests.ConnectionError as err:
+            logger.error('Network problem occurred ' + str(err))
             return None
 
         if not response.ok:
+            logger.warning('Register code: {0}; HTTP Error: {1}'
+                           .format(self._SEARCH_PARAMS['q'], response.status_code))
             return None
 
         return response
@@ -152,6 +172,9 @@ class CreditinfoScarper:
                     continue
 
                 company_info[self._PROP_FORMATTED[key]] = val
+
+        logger.info('Register code: {0}; Extracted information about a company;'
+                    .format(self._SEARCH_PARAMS['q']))
         return company_info
 
     def _store_company_info(self, company_info):
@@ -179,6 +202,8 @@ class CreditinfoScarper:
             session.write_transaction(add_node_company, **company_info)
             session.write_transaction(add_node_person, p_name=representatives)
             session.write_transaction(add_rela_works_in, p_name=representatives, c_name=company_info['name'])
+        logger.info('Register code: {0}; Stored information in the database;'
+                    .format(self._SEARCH_PARAMS['q']))
 
     def _search(self):
         r"""The actual search of information about a company. The result
@@ -187,7 +212,9 @@ class CreditinfoScarper:
         :return: none
         """
         self._build_query()
-        print("Make a search request; Register code: " + self._SEARCH_PARAMS['q'])
+
+        logger.info('Register code: {0}; Making a search request;'
+                    .format(self._SEARCH_PARAMS['q']))
 
         response = self._get_request(self._SEARCH_URL, self._SEARCH_PARAMS)
         if response is None:
@@ -196,24 +223,41 @@ class CreditinfoScarper:
         tree = html.fromstring(response.text)
         if tree.xpath("//div[contains(@class, 'alert') and not(contains(@style, 'display:none;'))]"
                       "or //p[text()='Company is deleted']"):
+            logger.warning('Non-existent Register code: {0}'
+                           .format(self._SEARCH_PARAMS['q']))
             return
 
         self._store_company_info(self._process_query_response(tree))
 
-    def scrape(self, num_threads=4):
+    def scrape(self, req_per_sec=2, num_threads=4):
         r"""Makes multiple different search requests in parallel.
 
+        :param req_per_sec: the number of requests per second (default: 1)
         :param num_threads: the number of threads that  (default: 4)
         :return: none
         """
+
         if isinstance(num_threads, int) \
                 and 1 <= num_threads <= 16:
             thread_pool = ThreadPool(num_threads)
         else:
+            logger.error('The number of threads must be within [1, 16]')
             raise ValueError('Invalid number of threads')
 
-        for _ in range(1000):
+        if isinstance(req_per_sec, (int, float)) \
+                and 0 < req_per_sec:
+            sleep_time = 1 / req_per_sec
+        else:
+            logger.error('The number of requests per second must be positive')
+            raise ValueError('Invalid number of requests per second')
+
+        logger.info('Started extracting the information')
+
+        for _ in iter(self._RC_RANGE):
             thread_pool.apply_async(self._search)
+            time.sleep(sleep_time)
 
         thread_pool.close()
         thread_pool.join()
+
+        logger.info('Finished extracting the information')
