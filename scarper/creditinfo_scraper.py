@@ -11,8 +11,11 @@ logger = logging.getLogger(__name__)
 
 class CreditinfoScarper:
     def __init__(self, session, driver, rc_range, search_params=None):
-        r"""Initialization
+        """
+        Initialization.
 
+        :param session: an active connection to the resource
+        :param driver: an active connection to the database
         :param rc_range: range of registration codes
         :param search_params: a dictionary with search parameters (default: None)
         """
@@ -81,7 +84,8 @@ class CreditinfoScarper:
             raise ValueError('Invalid driver object')
 
     def _build_query(self):
-        r"""Update the search query parameters for the GET request
+        """
+        Update the search query parameters for the GET request
 
         :return: none
         """
@@ -98,7 +102,8 @@ class CreditinfoScarper:
         })
 
     def _get_request(self, search_url, params, timeout=3.):
-        r"""Wrapper that handles exceptions of the GET request.
+        """
+        Wrapper that handles exceptions of the GET request.
 
         :param search_url: the search query url
         :param params: the search parameters
@@ -109,10 +114,10 @@ class CreditinfoScarper:
         try:
             response = self._SESSION.get(search_url, params=params, timeout=timeout)
         except requests.Timeout as err:
-            logger.error('Connection timeout ' + str(err))
+            logger.error('Connection timeout: ' + str(err))
             return None
         except requests.ConnectionError as err:
-            logger.error('Network problem occurred ' + str(err))
+            logger.error('Network problem occurred: ' + str(err))
             return None
 
         if not response.ok:
@@ -123,9 +128,10 @@ class CreditinfoScarper:
         return response
 
     def _process_query_response(self, tree):
-        r"""Processes the response to the search GET request from the server.
-        More precisely, extracts from the tree information about a company and
-        puts it ine dictionary.
+        """
+        Processes the response to the search GET request from the server. More
+        precisely, extracts from the tree information about a company and puts
+        it ine dictionary.
 
         :param tree: lxml HTML tree obtained after the search query
         :return: a dictionary containing information about a company
@@ -178,7 +184,8 @@ class CreditinfoScarper:
         return company_info
 
     def _store_company_info(self, company_info):
-        r"""Stores information about a company into the graph database.
+        """
+        Stores information about a company into the graph database.
 
         :param company_info: a dictionary containing information about a company
         :return: none
@@ -206,8 +213,9 @@ class CreditinfoScarper:
                     .format(self._SEARCH_PARAMS['q']))
 
     def _search(self):
-        r"""The actual search of information about a company. The result
-        is stored in the graph database
+        """
+        The actual search of information about a company. The result
+        is stored in the graph database.
 
         :return: none
         """
@@ -230,9 +238,10 @@ class CreditinfoScarper:
         self._store_company_info(self._process_query_response(tree))
 
     def scrape(self, req_per_sec=2, num_threads=4):
-        r"""Makes multiple different search requests in parallel.
+        """
+        Makes multiple different search requests in parallel.
 
-        :param req_per_sec: the number of requests per second (default: 1)
+        :param req_per_sec: the number of requests per second (default: 2)
         :param num_threads: the number of threads that  (default: 4)
         :return: none
         """
