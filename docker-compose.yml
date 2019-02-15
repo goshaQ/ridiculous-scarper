@@ -1,0 +1,20 @@
+version: "3"
+services:
+  scarper:
+    image: python:3.7.2-slim
+    volumes:
+      - .:/app
+    network_mode: host
+    working_dir: /app/scarper
+    command: >
+         bash -c " pip install -r ../requirements.txt
+         && python interrogator.py"
+    restart: on-failure
+    depends_on:
+       - neo4j
+  neo4j:
+    image: neo4j:3.5.3
+    volumes:
+      - ./neo4j/data:/data
+      - ./neo4j/logs:/logs
+    network_mode: host

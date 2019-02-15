@@ -1,3 +1,4 @@
+import os
 import json
 import requests
 import lxml.html
@@ -6,6 +7,7 @@ import logging.config
 import creditinfo_scraper
 
 from neo4j import GraphDatabase
+from configparser import ConfigParser
 
 
 def init_db(driver):
@@ -29,7 +31,7 @@ def main():
     english_version_url = 'https://www.e-krediidiinfo.ee/keel/en'
 
     # Load credentials
-    with open('../secrets.json') as fd:
+    with open(secrets_path) as fd:
         secrets = json.load(fd)
 
     # Create session for requests
@@ -45,6 +47,8 @@ def main():
     if tree.xpath("//div[contains(@class, 'alert')]"):
         raise Exception('Invalid authentication credentials provided')
 
+    logger.info('Logged in to https://www.e-krediidiinfo.ee')
+
     # Switch to english version
     session.get(english_version_url)
 
@@ -53,19 +57,36 @@ def main():
     driver = GraphDatabase\
         .driver(db_secrets['url'], auth=(db_secrets['login'], db_secrets['password']))
 
+    logger.info('Connected to Neo4j')
+
     # Create indexes on frequently queried properties
     init_db(driver)
 
     # Create an instance of the scraper
+    rc_range = range(rc_range_start, rc_range_end)
     scarper = creditinfo_scraper\
-        .CreditinfoScarper(session, driver, rc_range=range(12886000, 12886100))
+        .CreditinfoScarper(session, driver, rc_range=rc_range)
+
+    logger.info('Created an instance of CreditinfoScarper; Processing...')
 
     # Start the scarper
     scarper.scrape()
 
+    logger.info('Successfully collected the information about companies '
+                'within (Register code) {0}'.format(rc_range))
+
 
 if __name__ == '__main__':
-    logging.config.fileConfig('../logging.conf')
+    conf = ConfigParser()
+    project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    conf.read(os.path.join(project_dir, 'scarper.conf'))
+
+    secrets_path = conf.get('paths', 'secrets.json')
+    logging_path = conf.get('paths', 'logging.conf')
+    rc_range_start = int(conf.get('rc_range', 'start'))
+    rc_range_end = int(conf.get('rc_range', 'end'))
+
+    logging.config.fileConfig(logging_path)
     logger = logging.getLogger(__name__)
 
     main()
