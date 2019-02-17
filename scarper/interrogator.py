@@ -64,16 +64,15 @@ def main():
 
     # Create an instance of the scraper
     rc_range = range(rc_range_start, rc_range_end)
-    scarper = creditinfo_scraper\
-        .CreditinfoScarper(session, driver, rc_range=rc_range)
+    scarper = creditinfo_scraper.CreditinfoScarper(session, driver)
 
     logger.info('Created an instance of CreditinfoScarper; Processing...')
 
     # Start the scarper
-    scarper.scrape()
+    scarper.scrape(rc_range)
 
     logger.info('Successfully collected the information about companies '
-                'within (Register code) {0}'.format(rc_range))
+                f'within (Register code) {rc_range}')
 
 
 if __name__ == '__main__':
